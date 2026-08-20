@@ -92,6 +92,16 @@ arguments
     opts.MultimodalMeasurement (1,1) string = "maxWeight"
     opts.Reuse (1,1) logical = true
     opts.Seed = []
+    %INCREMENT Which replay increment this update is, for the failure packet.
+    %   Carried rather than inferred: state.numUpdates counts updates, and a
+    %   caller that replays a case knows the increment number the reader of a
+    %   diagnostic actually wants to look up.
+    opts.Increment (1,1) double = NaN
+    %CASEMETADATA The case's own association settings, for the failure packet.
+    %   Read only to be reported. A reachability failure has to be separable
+    %   from a silently altered measurement stream, and that is the field
+    %   that says which one happened.
+    opts.CaseMetadata (1,1) struct = struct()
     %PROGRESS A utils.ProgressReporter, or [] for a run nobody is watching.
     %   An option rather than a config field because this function takes no
     %   config: it is called with the pieces of one, and adding the whole
@@ -232,7 +242,7 @@ for c = keys.leafToRoot
         samplers{c} = state.cache.samplers{hit};
         reused(end+1) = c; %#ok<AGROW>
         recCell{c} = localRecord(c, cl, samplers{c}, "reused", toc(tClique), ...
-            struct(), struct(), struct());
+            struct(), struct(), struct(), struct('summary', "not run: reused"));
         continue
     end
 
@@ -244,8 +254,21 @@ for c = keys.leafToRoot
     [given, gInfo] = methods.nfisam.combineChildSeparators( ...
         samplers(cl.Children), opts.NumSamples);
 
+    % BEFORE THE FLOW FIT, NOT DURING IT. The simulator discovers an
+    % unreachable variable tens of seconds in and names only the variable;
+    % the preflight answers the same question deterministically and, when it
+    % says no, says it with the whole clique around it.
+    cliqueFactors = localFactorsNamed(graph, cl.Factors);
+    pf = methods.nfisam.reachabilityPreflight(cliqueFactors, ...
+        'Given', given, 'Frontal', cl.Frontal, 'Separator', cl.Separator);
+    if ~pf.ok
+        error('methods:nfisam:incrementalUpdate:unreachable', '%s', ...
+            localPacket(pf, opts.Increment, c, cl, cliqueFactors, gInfo, ...
+                order, orderSource, opts.CaseMetadata));
+    end
+
     [Sd, Vd, n1] = methods.nfisam.trainingSampleSimulator( ...
-        localFactorsNamed(graph, cl.Factors), ...
+        cliqueFactors, ...
         'NumSamples', opts.NumSamples, 'Given', given, ...
         'Frontal', cl.Frontal, 'Separator', cl.Separator, ...
         'MultimodalMeasurement', opts.MultimodalMeasurement);
@@ -259,7 +282,7 @@ for c = keys.leafToRoot
 
     trained(end+1) = c; %#ok<AGROW>
     recCell{c} = localRecord(c, cl, samplers{c}, "trained", toc(tClique), ...
-        n1, n2, gInfo);
+        n1, n2, gInfo, pf);
 end
 
 if numC == 0
@@ -339,6 +362,105 @@ function f = localFraction(a, b)
 if b == 0, f = 0; else, f = a / b; end
 end
 
+function txt = localPacket(pf, k, c, cl, factors, gInfo, order, orderSource, meta)
+%LOCALPACKET The structured diagnostic a reachability failure has to carry.
+%   Inputs   PF the preflight report, K the increment, C the clique index, CL
+%           the clique, FACTORS its factors, GINFO the child-separator
+%           combination, ORDER and ORDERSOURCE the elimination order in use,
+%           META the case's association settings
+%   Outputs  TXT, the packet as readable text
+%   Utility  answer, at the point of failure, every question section 6.3 of
+%           the closeout brief says has to be answered before anyone can tell
+%           a graph-order problem from a factor-assembly one.
+%
+%   The fields are the brief's, in its order, because the point of a fixed
+%   packet is that two failures can be compared line by line.
+L = string.empty(1, 0);
+L(end+1) = "NF-iSAM reachability preflight FAILED before flow training.";
+L(end+1) = "";
+L(end+1) = sprintf("  increment          %s", localNum(k));
+L(end+1) = sprintf("  clique             %d (%s)", c, cl.label());
+L(end+1) = sprintf("  frontal            %s", localList(cl.Frontal));
+L(end+1) = sprintf("  separator          %s", localList(cl.Separator));
+L(end+1) = "";
+
+for i = 1:numel(pf.failures)
+    f = pf.failures(i);
+    L(end+1) = sprintf("  failing factor     %s", localList(f.factor)); %#ok<AGROW>
+    L(end+1) = sprintf("  role / reason      %s / %s", f.role, f.reason); %#ok<AGROW>
+    L(end+1) = sprintf("  missing variables  %s", localList(f.missing)); %#ok<AGROW>
+end
+
+L(end+1) = "";
+L(end+1) = sprintf("  reachable          %s", localList(pf.reachable));
+L(end+1) = sprintf("  unreachable        %s", localList(pf.unreachable));
+L(end+1) = sprintf("  given to clique    %s", localList(pf.given));
+L(end+1) = sprintf("  constructible z    %s", localList(pf.constructible));
+L(end+1) = "";
+
+L(end+1) = "  local factors";
+for f = factors
+    L(end+1) = sprintf("      %-28s %-12s %s", f.Name, ...
+        methods.nfisam.factorRole(f), localList(f.Scope)); %#ok<AGROW>
+end
+
+L(end+1) = "";
+L(end+1) = sprintf("  child separators   %s", ...
+    localList(localField(gInfo, 'names', string.empty(1,0))));
+L(end+1) = sprintf("  children combined  %s", ...
+    localList(localField(gInfo, 'combined', string.empty(1,0))));
+L(end+1) = sprintf("  elimination order  %s", localList(order));
+L(end+1) = sprintf("  order source       %s", orderSource);
+
+L(end+1) = "";
+L(end+1) = "  association metadata";
+if isempty(fieldnames(meta))
+    L(end+1) = "      none supplied";
+else
+    for n = string(fieldnames(meta)).'
+        L(end+1) = sprintf("      %-34s %s", n, localScalar(meta.(n))); %#ok<AGROW>
+    end
+end
+
+L(end+1) = "";
+L(end+1) = "  A dataset-side reduction of ambiguity is not the fix. Either the";
+L(end+1) = "  generative route named above is missing from this clique, or the";
+L(end+1) = "  measurement stream was changed -- the metadata says which.";
+txt = strjoin(L, newline);
+end
+
+function s = localList(v)
+%LOCALLIST A string array as one readable field.
+%   Inputs   V, a string array
+%   Outputs  S, the joined text or a dash
+%   Utility  an empty list must read as empty, not as a blank line.
+v = string(v);
+v = v(strlength(v) > 0);
+if isempty(v), s = "--"; else, s = strjoin(v, ", "); end
+end
+
+function s = localNum(x)
+%LOCALNUM A number that may not be known.
+%   Inputs   X
+%   Outputs  S, the number or a dash
+%   Utility  a caller that did not say which increment it is must not print NaN.
+if isnan(x), s = "--"; else, s = sprintf("%d", x); end
+end
+
+function s = localScalar(v)
+%LOCALSCALAR One metadata value, printed.
+%   Inputs   V
+%   Outputs  S
+%   Utility  settings hold numbers, strings and flags; all three appear here.
+if isstring(v) || ischar(v)
+    s = string(v);
+elseif isscalar(v) && isnumeric(v)
+    s = string(num2str(v));
+else
+    s = "<" + class(v) + " " + strjoin(string(size(v)), "x") + ">";
+end
+end
+
 function fs = localFactorsNamed(graph, names)
 %LOCALFACTORSNAMED The graph's factors with the given names.
 %   Inputs   GRAPH, NAMES
@@ -369,7 +491,7 @@ for f = string(fieldnames(spec)).'
 end
 end
 
-function r = localRecord(c, cl, sampler, action, runtime, n1, n2, gInfo)
+function r = localRecord(c, cl, sampler, action, runtime, n1, n2, gInfo, pf)
 %LOCALRECORD One clique's line of the update record.
 %   Inputs   C the index, CL the clique, SAMPLER its sampler, ACTION trained
 %           or reused, RUNTIME, N1 and N2 the two algorithms' info, GINFO the
@@ -379,7 +501,8 @@ function r = localRecord(c, cl, sampler, action, runtime, n1, n2, gInfo)
 %   Utility  build the record in one place so a reused clique and a trained
 %           one cannot have different fields.
 if nargin == 0
-    r = localRecord(0, core.BayesTreeClique(), [], "", 0, struct(), struct(), struct());
+    r = localRecord(0, core.BayesTreeClique(), [], "", 0, struct(), struct(), ...
+        struct(), struct());
     return
 end
 
@@ -412,6 +535,7 @@ r.outOfSupport = localField(n2, 'observationOutOfSupport', false);
 ess = localField(gInfo, 'effectiveSampleSize', []);
 if isempty(ess), r.minEffectiveSampleSize = NaN; else, r.minEffectiveSampleSize = min(ess); end
 r.approximatedSeparators = localField(gInfo, 'approximated', string.empty(1,0));
+r.preflight = localField(pf, 'summary', "not run");
 end
 
 function v = localField(s, name, default)

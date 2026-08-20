@@ -42,6 +42,18 @@ function d = gridWorldDefaults(layout)
 %   The counts are at seed 11 and are what datasets.makeGridWorldCase's
 %   tables were measured at.
 %
+%   AND THE CORRIDOR'S PAIR IS ITS WORST CELL, WHICH IS WORTH KNOWING BEFORE
+%   QUOTING IT. At six poses Smoothed Slices reaches 8.63 m of pose RMSE on a
+%   support effective sample size of 1.1, while the same layout at eight and
+%   nine poses sits between 1.09 and 3.41 m with the support ESS in the
+%   twenties. The pair stays as it is for the reason above -- every corridor
+%   row on record was measured at six poses -- and no protocol moves a default
+%   out from under the sweep that cites it: where a protocol needs another
+%   pose count it passes one explicitly, as
+%   campaign.protocol_P20_gridWorldAnimation does with the warehouse at
+%   twelve against its nominal six. The measurement is tabulated in
+%   datasets.makeGridWorldCase.
+%
 %   See also datasets.makeGridWorldCase, methods.gridWorldSweepPlan.
 
 arguments

@@ -13,6 +13,10 @@ function caseData = makePlazaCase(opts)
 %   Outputs
 %     CASEDATA  the case struct, plus the plaza block recording the window,
 %               the dead reckoning, the calibration and the window choice
+%     CASEDATA.settings reports what the association actually came out as:
+%               requestedAmbiguityFraction, numAmbiguousReadings,
+%               effectiveAmbiguityFraction and, always zero,
+%               numAmbiguityDeferredForInitialization
 %
 %   Utility
 %     Build a case from real measurements: K consecutive keyframes, the
@@ -236,8 +240,8 @@ factors = core.Factor.empty(1, 0);
 increments = struct('k', {}, 'poseName', {}, 'newVariables', {}, ...
                     'factorIndex', {}, 'observations', {});
 seenLm = false(1, nLm);
-numAmbiguousActual = 0;
-numAmbiguousDeferred = 0;
+numAmbiguousActual   = 0;
+numAmbiguousDeferred = 0;   % no reading is withheld; reported so it says so
 
 % WHICH READINGS LOSE THEIR ASSOCIATION, decided once, up front, for exactly
 % the requested fraction. A coin flip per reading would be the obvious way and
@@ -305,20 +309,7 @@ for k = 1:K
         % Real association failure does not wait for coincidence.
         partner = [];
         if isAmbiguous(j)
-            % Algorithm N1 can process a data-association factor only after
-            % every candidate landmark has already been reached by priors or
-            % sampleable binary factors. Therefore ambiguity is applied only
-            % among landmarks already established by earlier known readings.
-            % If this is the true landmark's first sighting, or fewer than two
-            % landmarks are established, keep this reading known so it can
-            % initialize the graph; later selected readings remain ambiguous.
-            established = find(seenLm);
-            if seenLm(vi)
-                partner = established(established ~= vi);
-            end
-            if isempty(partner)
-                numAmbiguousDeferred = numAmbiguousDeferred + 1;
-            end
+            partner = setdiff(1:nLm, vi);
         end
 
         if isempty(partner)

@@ -12,6 +12,17 @@ function caseData = makeGridWorldCase(opts)
 %   Outputs
 %     CASEDATA  the case struct, plus the map, the explored-cell pages and
 %               the mission the poses were walked along
+%     CASEDATA.settings reports what the association actually came out as:
+%               numRangeReadings, numAmbiguousReadings,
+%               effectiveAmbiguityFraction and, always zero,
+%               numAmbiguityDeferredForInitialization. There is no requested
+%               fraction here: ambiguity is geometric, so the fraction is a
+%               measurement of the layout rather than a target to be met
+%     CASEDATA.settings also carries nominalNumPoses for the layout and a
+%               caseProfile of "nominal" or "stress" with caseProfileReason.
+%               A K past the layout's measured pose count is scalability
+%               evidence and is labelled so, since unlabelled beside the
+%               nominal runs it would read as the benchmark getting worse
 %
 %   Utility
 %     Build the general planar SLAM case that the two-pose benchmark is the
@@ -116,10 +127,38 @@ function caseData = makeGridWorldCase(opts)
 %   direction is in datasets.makePlazaCase: two elimination orders with
 %   identical separator sizes differ tenfold in pose RMSE.
 %
-%   What is left standing and unmeasured is total path length -- drift
-%   accumulates along the chain, and the office's route is much the most
-%   compact of the three. Untested, so it is written here as the next
-%   experiment rather than as the reason.
+%   AND IT IS NOT TOTAL PATH LENGTH, WHICH THIS COMMENT USED TO OFFER AS THE
+%   LAST CANDIDATE. It said drift accumulates along the chain and the office's
+%   route is much the most compact of the three. The second half is simply
+%   false: the office route is 53.5 m, the warehouse's 44.0 m and the
+%   corridor's 24.0 m, so the office is the LONGEST of the three and is also
+%   the one that is accurate at its own default. The hypothesis never fitted
+%   the layout it was proposed to explain.
+%
+%   Measured, it fails twice more. localWalkPath subdivides a route rather
+%   than extending it once the pose count passes the station count, so pose
+%   count can be moved with the path length, the map and the beacon set all
+%   held fixed. Two such comparisons, seed 11 at the usual budget:
+%
+%       layout      poses  path    variables   Slices   Smoothed
+%       office        5    53.5 m      13        0.87      1.13
+%       office        8    53.5 m      16       22.73     10.05
+%       warehouse     8    44.0 m      15       13.10      4.53
+%       warehouse    12    44.0 m      19        3.94      1.50
+%
+%   Same path, same beacons, more poses -- and the office gets an order of
+%   magnitude worse while the warehouse gets three times better. One
+%   direction would have been evidence; two opposite directions mean path
+%   length is not the mechanism, and neither is pose count on its own.
+%
+%   SO NO MECHANISM IS NAMED HERE. Map scale, variable count, loop closure,
+%   separator width and path length have each been tested and each failed.
+%   What is left is a correlation that has not been isolated: the
+%   configurations that hold their accuracy tend to be the ones whose beacons
+%   accumulate three or more sightings. Beacon count, sightings per beacon
+%   and pose spacing all move together across these layouts, and nothing
+%   measured separates them. It is written down as the next experiment, and
+%   this time as a correlation rather than as a reason.
 %
 %   ONE CAUTION ON READING ANY OF THESE NUMBERS. The scatter between runs of
 %   the SAME configuration is large: the warehouse at five poses measured
@@ -168,6 +207,114 @@ function caseData = makeGridWorldCase(opts)
 %   rule the comment stated: a beacon near the midpoint of a leg is about
 %   3 m from both of its ends, and 3 m is inside the warehouse's 4 m range
 %   while the 6 m from one station to the next is not.
+%
+%   WHICH CONFIGURATION AN INCREMENT ANIMATION CAN BE DRAWN ON, and why it is
+%   not this layout at its default. The map view is stepped through the
+%   increments as a sequence, so an animation needs three things at once:
+%   frames, beacons that are re-observed so that something visibly tightens,
+%   and an estimate that stays on the map for the whole mission. The office
+%   default gives five frames, one sighting per beacon, and no ambiguous
+%   readings at all. Running it longer does not buy any of the three. Seed 11,
+%   pose RMSE in metres:
+%
+%       poses  variables  separator   Slices   Smoothed
+%         5       13          6         0.87      1.13
+%         7       15          6         3.65      7.91
+%         8       16          4        22.73     10.05
+%         9       17          4        21.51      9.53
+%        10       18          4         3.95     16.05
+%        12       20          4        12.19      4.46
+%
+%   NOT WIDTH, AND NOT BUDGET EITHER. The separator NARROWS to four dimensions
+%   at eight poses and above and the case fails there anyway, which is the
+%   verdict the warehouse already gave from the other direction. And at nine
+%   poses, raising the separator support from 201 to 601, 1201 and 2001 points
+%   moves Slices to 7.65, 11.63 and 11.24 m and Smoothed Slices to 14.14, 10.42
+%   and 1.98 m. That is scatter, not convergence, and the last of those cells
+%   costs 620 s for two methods.
+%
+%   AND THE ANIMATION IS THE AMBIGUOUS RUN, WHICH CHANGES WHICH SEPARATOR
+%   COUNTS. A gaussian map sequence shows two trajectories closing on a
+%   reference, which the estimator-versus-reference figure shows better. The
+%   one thing only the map sequence shows is the alternative association --
+%   viz.plotMapStep's dashed line to the other beacon a reading could have come
+%   from. So the layout has to be chosen on the AMBIGUOUS graph, and an
+%   ambiguous factor couples its pose to TWO landmarks and joins them in the
+%   clique. The two separators are not the same number:
+%
+%       layout      poses  variables  sep known  sep ambiguous  ambiguous
+%       corridor      9        13         6           10          4 of 16
+%       corridor     12        16        10           14          6 of 22
+%       warehouse     9        16         4            4         10 of 15
+%       warehouse    12        19         4            6         10 of 18
+%       warehouse    14        21         4            6         10 of 20
+%       office        9        17         4            4          6 of 16
+%
+%   THE CORRIDOR LENGTHENS WELL KNOWN AND BADLY AMBIGUOUS. It carries four
+%   beacons against the office's eight, so a longer mission adds one variable
+%   per pose instead of one per pose and a beacon with it, and at nine poses it
+%   is thirteen variables on a six-dimensional separator -- the office's
+%   five-pose shape, reached with nine frames rather than five:
+%
+%       poses  variables  separator   Slices   Smoothed   support ESS
+%         6       10          4         2.29      8.63     1.1 / 7.8
+%         7       11          6         1.81      2.24    15.5 / 6.8
+%         8       12          6         1.09      3.41    25.8 / 24.4
+%         9       13          6         1.91      2.49    25.8 / 24.4
+%        10       14          8         2.42      2.20     8.0 / 17.7
+%        12       16         10         3.15      2.76    13.1 / 1.9
+%
+%   But those are the KNOWN numbers. Turn the association on and the same nine
+%   pose cell is a ten-dimensional separator, which is the wall the finite
+%   support is already known to hit here and on both Plaza windows. Over seeds
+%   3, 7, 11, 13 and 17 it spans 1.96 to 4.78 m for Slices and 3.32 to 7.57 m
+%   for Smoothed Slices, and at the last increment both estimates sit in the
+%   left third of a sixteen-metre map while the vehicle is at x = 15. It
+%   animates; it does not track.
+%
+%   THE WAREHOUSE HOLDS THE AMBIGUOUS SEPARATOR DOWN WHILE RAISING THE
+%   AMBIGUITY. Thirteen beacons mean a reading has more neighbours that could
+%   have produced it -- ten of eighteen ambiguous rather than four of sixteen --
+%   while the aisles keep only a few in range at once, so the cliques stay
+%   narrow. Ambiguous, two seeds, same engine and budget:
+%
+%       poses  variables  sep   Slices s11/s17   Smoothed s11/s17   seconds
+%         9       16       4      3.86 / 1.54       2.08 / 3.41       5-9
+%        10       17       6      2.24 / 2.51       3.31 / 3.63        7
+%        12       19       6      2.14 / 2.58       1.63 / 3.04       10
+%        14       21       6      0.91 / 3.41       2.83 / 4.40       10
+%
+%   Every warehouse row beats every corridor and office row, at a fifth of the
+%   cost, so twelve poses is chosen inside the layout rather than against it:
+%   it is where the two seeds sit closest together on both methods, with twelve
+%   frames and sightings of three, three, three, three, two, two and two.
+%
+%   TWO CAUTIONS TRAVEL WITH THAT CELL. Six of its thirteen beacons are never
+%   observed and the map draws all thirteen, so stars and rays will not tally --
+%   the reason is range and occlusion, not a filtered figure. And ambiguity
+%   still widens the graph, four to six on the same nineteen variables, so a
+%   gap between the two associations is ambiguity AND width together and
+%   belongs to neither alone. Six is inside the range every other shipped case
+%   runs at, where the corridor's ten was not, so the control is worth reading
+%   here in a way it was not there.
+%
+%   THE SEED SCATTER IS PART OF THE RESULT AND NOT AN ASIDE, on either layout.
+%   The corridor known at nine poses, over the same five seeds:
+%
+%       seed        3     7    11    13    17
+%       Slices    1.29  2.41  1.91  4.91  0.52
+%       Smoothed  3.84  2.89  2.49  1.50  2.31
+%
+%   That is a wide band, and no cell in any table here should be quoted from a
+%   single draw. What separates these layouts from the office is not that they
+%   are tight but that they never leave the map: the office's eight- and
+%   nine-pose cells sit above 20 m, larger than the layout is wide, and its
+%   nine-pose cell run ambiguous is 8.53 and 5.94 m on a separator still four
+%   wide -- so the office cliff is not the association either. The support
+%   effective sample size moves with the seed too, falling to 1.1 on some
+%   draws, so a run of any of these can still raise the coverage warning.
+%
+%   campaign.protocol_P20_gridWorldAnimation runs it and writes the frames.
 %
 %   WHY SENSOR RANGE IS PER LAYOUT. It is not a taste setting, it is what
 %   decides how many variables the graph has: every beacon within range is a
@@ -327,8 +474,9 @@ increments = struct('k', {}, 'poseName', {}, 'newVariables', {}, ...
                     'factorIndex', {}, 'observations', {});
 
 seenLandmark = false(1, nLm);
-numAmbiguousActual = 0;
-numAmbiguousDeferred = 0;
+numRangeReadings     = 0;
+numAmbiguousActual   = 0;
+numAmbiguousDeferred = 0;   % no reading is withheld; reported so it says so
 
 for k = 1:nPose
     newFactorIdx = [];
@@ -362,6 +510,7 @@ for k = 1:nPose
     for vi = visible.'
         r = d(vi) + opts.RangeSigma * randn(noiseStream);
         r = max(r, 1e-3);
+        numRangeReadings = numRangeReadings + 1;
 
         partner = [];
         if opts.Association == "ambiguous"
@@ -372,17 +521,6 @@ for k = 1:nPose
             others = visible(visible ~= vi);
             near = others(abs(d(others) - d(vi)) < 3 * opts.RangeSigma);
             if ~isempty(near), partner = near(1); end
-
-            % NF-iSAM Algorithm N1 handles an ambiguous association only in
-            % Step 4, after every latent variable in that factor has already
-            % been reached by a prior or a sampleable binary factor. Do not
-            % let ambiguity be the first event that introduces either
-            % landmark. The first sighting remains a known range factor; later
-            % sightings may be ambiguous once both candidates are established.
-            if ~isempty(partner) && ~(seenLandmark(vi) && seenLandmark(partner))
-                partner = [];
-                numAmbiguousDeferred = numAmbiguousDeferred + 1;
-            end
         end
 
         if isempty(partner)
@@ -478,6 +616,20 @@ caseData.groundTruth = struct( ...
 % the beacons PLACED and numObservedLandmarks the ones that made it into the
 % graph, and the gap between them is how much of a layout a short mission
 % actually visits.
+% A K past the layout's measured pose count is scalability evidence, not the
+% nominal benchmark, and the case says so itself rather than leaving a reader
+% to notice. Nothing about the run changes; only what it may be compared to.
+if nPose > defaults.numPoses
+    profile = "stress";
+    profileWhy = sprintf(['%d poses against the nominal %d for the %s ' ...
+        'layout: scalability evidence, not the nominal benchmark'], ...
+        nPose, defaults.numPoses, opts.Layout);
+else
+    profile = "nominal";
+    profileWhy = sprintf('%d poses, within the nominal %d for the %s layout', ...
+        nPose, defaults.numPoses, opts.Layout);
+end
+
 caseData.settings = struct( ...
     'layout', opts.Layout, 'numPoses', nPose, 'numLandmarks', nLm, ...
     'numObservedLandmarks', nnz(seenLandmark), ...
@@ -487,9 +639,13 @@ caseData.settings = struct( ...
     'sensorRange', opts.SensorRange, 'rangeSigma', opts.RangeSigma, ...
     'odomSigma', opts.OdomSigma, 'priorSigma', opts.PriorSigma, ...
     'association', opts.Association, 'seed', opts.Seed, ...
+    'numRangeReadings', numRangeReadings, ...
     'numAmbiguousReadings', numAmbiguousActual, ...
+    'effectiveAmbiguityFraction', numAmbiguousActual / max(numRangeReadings, 1), ...
     'numAmbiguityDeferredForInitialization', numAmbiguousDeferred, ...
-    'cellSize', opts.CellSize);
+    'cellSize', opts.CellSize, ...
+    'nominalNumPoses', defaults.numPoses, ...
+    'caseProfile', profile, 'caseProfileReason', profileWhy);
 
 caseData.latex = struct( ...
     'graph',  "$\prod_k f(x_k,x_{k+1}) \prod_{(k,m)\in\mathcal{V}} f(x_k,l_m)$", ...

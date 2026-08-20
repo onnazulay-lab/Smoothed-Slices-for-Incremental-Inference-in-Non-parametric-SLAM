@@ -581,6 +581,12 @@ end
 
 % -------------------------------------------------------------------------
 function v = localAmbiguousEval(s, kx, kls, r, sigma, w)
+%LOCALAMBIGUOUSEVAL A range reading whose landmark is not known.
+%   Inputs   S the query struct, KX the pose key, KLS the candidate landmark
+%            keys, R the measured range, SIGMA its noise, W the candidate weights
+%   Outputs  V, one density value per row of S
+%   Utility  sum the per-candidate range likelihoods, which is what makes the
+%            factor a mixture rather than a choice.
 x = s.(kx);
 v = zeros(size(x, 1), 1);
 for k = 1:numel(kls)
@@ -591,6 +597,12 @@ end
 
 % -------------------------------------------------------------------------
 function v = localMixtureEval(a, b, deltas, sigmas, w)
+%LOCALMIXTUREEVAL A relative measurement with several possible offsets.
+%   Inputs   A and B the two variables, DELTAS the offsets, SIGMAS their
+%            noises, W the component weights
+%   Outputs  V, one density value per element of B - A
+%   Utility  evaluate the mixture on the difference, so the factor stays a
+%            function of the relative quantity alone.
 d = b - a;
 v = zeros(size(d));
 for k = 1:numel(deltas)
@@ -599,7 +611,12 @@ end
 end
 
 function s = localMixtureDraw(given, sgn, deltas, sigmas, w, n)
-% One independent row of N draws per given value.
+%LOCALMIXTUREDRAW Sample the other end of a mixture relative factor.
+%   Inputs   GIVEN the conditioned end, SGN +1 or -1 for which end is drawn,
+%            DELTAS, SIGMAS, W the mixture, N draws per given value
+%   Outputs  S, numel(GIVEN)-by-N
+%   Utility  draw a component first and then within it, giving one
+%            independent row of N draws per given value.
 m    = numel(given);
 comp = localCategorical(w, m, n);
 d    = reshape(deltas(comp), m, n);
@@ -608,6 +625,11 @@ s    = given + sgn * d + sg .* randn(m, n);
 end
 
 function idx = localCategorical(w, m, n)
+%LOCALCATEGORICAL M-by-N component indices from the weights W.
+%   Inputs   W the weights, M rows, N draws per row
+%   Outputs  IDX, M-by-N indices into W
+%   Utility  the last edge is pinned to 1 and NaNs fall to the last
+%            component, so a rounding error cannot produce a missing draw.
 edges = [0 cumsum(w(:).')];
 edges(end) = 1;
 u = rand(m, n);

@@ -107,6 +107,11 @@ ref.R0 = @(x1v, x2v) exp(-0.5 * ((x2v - x1v - dA - dB).^2) / rVar) / sqrt(2*pi*r
 end
 
 function ld = localLogDet(M)
+%LOCALLOGDET log|det M| through the LU factors.
+%   Inputs   M, square
+%   Outputs  LD, the log determinant
+%   Utility  det() overflows on the covariances this reference builds; the
+%            factors do not.
 [L, U, P] = lu(M); %#ok<ASGLU>
 ld = sum(log(abs(diag(U))));
 end

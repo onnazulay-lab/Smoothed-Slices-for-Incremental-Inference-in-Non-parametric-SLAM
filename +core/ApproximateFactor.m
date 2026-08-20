@@ -1,6 +1,11 @@
 classdef ApproximateFactor
     %APPROXIMATEFACTOR The generated separator factor f_new_hat(S_j | D_j).
     %
+    %   Inputs   SCOPE, ELIMINATEDVAR, SAMPLES and REMAINING, with options;
+    %            the static TABULATED builds the finite mode instead
+    %   Outputs  one factor, evaluable at query points and samplable slice
+    %            by slice, never a fitted density
+    %
     %   Properties
     %     Mode                      "mixture" (lazy) or "tabulated" (finite)
     %     Scope, ScopeDims          the separator S_j and each variable's dim

@@ -43,6 +43,11 @@ function [fnew, info] = estimateNewFactor(omega, separator, removedFactors, conf
 %                 average a(.,s) over them. This is the Slices paper.
 %       "rcs"     Eq. (50): evaluate R on a finite support by the sparse
 %                 conditional-smoothing recursion. This is Smoothed Slices.
+%       "rcsGeneral"  the same recursion, computed by the general Eqs. (44)-(50)
+%                 implementation that also serves depths this route cannot
+%                 reach. A developer route with no GUI control: its purpose is
+%                 that the general recursion research.recursionDepthStudy
+%                 depends on is held, here at H = 1, to the answer "rcs" gives.
 %
 %   Keeping one function for both is deliberate: it guarantees the two
 %   methods share the same outer samples, the same separator support and the
@@ -126,6 +131,9 @@ switch route.kind
                     af, g0, fuse, omega, sepVar, S, config);
             case "rcs"
                 [R, innerInfo] = methods.smoothed.evaluateSurfaceRecursion( ...
+                    af, g0, fuse, omega, sepVar, S, config);
+            case "rcsGeneral"
+                [R, innerInfo] = methods.smoothed.evaluateSurfaceRecursionGeneral( ...
                     af, g0, fuse, omega, sepVar, S, config);
             otherwise
                 error('methods:slices:unknownInnerEstimator', ...

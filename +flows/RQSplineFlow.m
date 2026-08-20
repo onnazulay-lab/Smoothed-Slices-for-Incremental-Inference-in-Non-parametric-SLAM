@@ -1,6 +1,11 @@
 classdef RQSplineFlow < flows.FlowModel
     %RQSPLINEFLOW Autoregressive rational-quadratic spline flow, spec section 9.
     %
+    %   Inputs   D, the width, then the section 9 hyperparameters, the
+    %            standardization and the seed
+    %   Outputs  a flow that starts as the identity map and is trained by
+    %            flows.trainFlow
+    %
     %   Properties
     %     Dimension                    D, the number of variables
     %     NumSplines, HiddenUnits      K and the conditioner width, section 9
@@ -394,6 +399,9 @@ end
 
 function z = localPromote(z, params)
 %LOCALPROMOTE Track the parameters when the samples are plain data.
+%   Inputs   Z the samples, PARAMS the conditioner learnables
+%   Outputs  Z, as a dlarray whenever PARAMS is tracked
+%   Utility  keep the gradient alive across the first indexed assignment.
 %   During training the samples are constants and the conditioner weights are
 %   dlarray; the transform of the two has to be a dlarray or the gradient
 %   stops at the first indexed assignment.
